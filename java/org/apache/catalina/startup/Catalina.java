@@ -167,14 +167,21 @@ public class Catalina extends Embedded {
     public void process(String args[]) {
 
         setAwait(true);
+        //设置catalinaHome和设置catalinaBase的值
         setCatalinaHome();
         setCatalinaBase();
         try {
+            //检查并使用启动参数
             if (arguments(args)) {
+                //如果启动参数是start
                 if (starting) {
+                    //解析server.xml文件，创建server对象
                     load(args);
+                    //启动server
                     start();
+                //如果启动参数是stop
                 } else if (stopping) {
+                    //关闭server
                     stopServer();
                 }
             }
@@ -192,6 +199,8 @@ public class Catalina extends Embedded {
      * <code>true</code> if we should continue processing; otherwise
      * return <code>false</code>.
      *
+     * 解析处理命令行参数，并且返回bool值，表示是否要继续执行下去
+     *
      * @param args Command line arguments to process
      */
     protected boolean arguments(String args[]) {
@@ -199,11 +208,13 @@ public class Catalina extends Embedded {
         boolean isConfig = false;
 
         if (args.length < 1) {
+            //控制台输出catalina的使用情况信息
             usage();
             return (false);
         }
 
         for (int i = 0; i < args.length; i++) {
+            //获取选项--config 后面的参数，保存到configFile变量中
             if (isConfig) {
                 configFile = args[i];
                 isConfig = false;
@@ -233,6 +244,8 @@ public class Catalina extends Embedded {
 
     /**
      * Return a File object representing our configuration file.
+     *
+     * 返回server.xml的file对象
      */
     protected File configFile() {
 
@@ -373,21 +386,32 @@ public class Catalina extends Embedded {
     }
 
 
+    /**
+     * 关闭server
+     */
     public void stopServer() {
         stopServer(null);
     }
 
+    /**
+     * 关闭server
+     * @param arguments
+     */
     public void stopServer(String[] arguments) {
 
+        //如果启动参数不为空，则检查并使用启动参数
         if (arguments != null) {
             arguments(arguments);
         }
 
         Server s = getServer();
+        //如果catalina没有对应的一个server，就根据server.xml创建一个
         if( s == null ) {
             // Create and execute our Digester
+            //创建用于关闭的Digester
             Digester digester = createStopDigester();
             digester.setClassLoader(Thread.currentThread().getContextClassLoader());
+            //找到server.xml文件
             File file = configFile();
             try {
                 InputSource is =
@@ -395,6 +419,7 @@ public class Catalina extends Embedded {
                 FileInputStream fis = new FileInputStream(file);
                 is.setByteStream(fis);
                 digester.push(this);
+                //解析server.xml
                 digester.parse(is);
                 fis.close();
             } catch (Exception e) {
@@ -402,6 +427,7 @@ public class Catalina extends Embedded {
                 System.exit(1);
             }
         } else {
+            //此时catalina离已经有对应的一个server,直接关闭就行
             // Server object already present. Must be running as a service
             if (s instanceof Lifecycle) {
                 try {
@@ -417,7 +443,8 @@ public class Catalina extends Embedded {
         // Stop the existing server
         s = getServer();
         try {
-            if (s.getPort()>0) { 
+            if (s.getPort()>0) {
+                //读取server.xml中server的配置信息，创建socket，并发送"关闭"命令给serverSocket
                 String hostAddress = InetAddress.getByName("localhost").getHostAddress();
                 Socket socket = new Socket(hostAddress, getServer().getPort());
                 OutputStream stream = socket.getOutputStream();
@@ -462,6 +489,7 @@ public class Catalina extends Embedded {
      */
     public void load() {
 
+        //统计加载时间
         long t1 = System.nanoTime();
 
         initDirs();
@@ -471,20 +499,25 @@ public class Catalina extends Embedded {
         initNaming();
 
         // Create and execute our Digester
+        //创建Digester对象，并添加解析server.xml的规则
         Digester digester = createStartDigester();
 
         InputSource inputSource = null;
         InputStream inputStream = null;
         File file = null;
+        //优先级加载读取server.xml
         try {
+            //获取server.xml的file对象
             file = configFile();
             inputStream = new FileInputStream(file);
             inputSource = new InputSource("file://" + file.getAbsolutePath());
         } catch (Exception e) {
             ;
         }
+        //通过FileInputStream获取失败时
         if (inputStream == null) {
             try {
+                //从classpath路径下获取资源文件的输入流
                 inputStream = getClass().getClassLoader()
                     .getResourceAsStream(getConfigFile());
                 inputSource = new InputSource
@@ -497,6 +530,9 @@ public class Catalina extends Embedded {
 
         // This should be included in catalina.jar
         // Alternative: don't bother with xml, just create it manually.
+        //Alternative:供选择的
+        //当tomcat作为一个独立的应用服务器时解析server.xml
+        //但当tomcat嵌入到其他应用中时，解析catalina.jar里的server-embed.xml
         if( inputStream==null ) {
             try {
                 inputStream = getClass().getClassLoader()
@@ -510,6 +546,7 @@ public class Catalina extends Embedded {
         }
         
 
+        //加载server.xm失败时报错
         if ((inputStream == null) && (file != null)) {
             log.warn("Can't load server.xml from " + file.getAbsolutePath());
             if (file.exists() && !file.canRead()) {
@@ -520,7 +557,9 @@ public class Catalina extends Embedded {
 
         try {
             inputSource.setByteStream(inputStream);
+            //把catalina对象压栈
             digester.push(this);
+            //进行真正的解析
             digester.parse(inputSource);
             inputStream.close();
         } catch (Exception e) {
@@ -530,11 +569,14 @@ public class Catalina extends Embedded {
         }
 
         // Stream redirection
+        //对输出流、错误流进行重定向
         initStreams();
 
         // Start the new server
+        //server对象是在digester解析sever.xml时创建并放入catalina对象中的
         if (getServer() instanceof Lifecycle) {
             try {
+                //初始化server
                 getServer().initialize();
             } catch (LifecycleException e) {
                 if (Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE"))
@@ -545,6 +587,7 @@ public class Catalina extends Embedded {
             }
         }
 
+        //统计加载时间
         long t2 = System.nanoTime();
         if(log.isInfoEnabled())
             log.info("Initialization processed in " + ((t2 - t1) / 1000000) + " ms");
@@ -559,6 +602,7 @@ public class Catalina extends Embedded {
 
         try {
             if (arguments(args))
+                //解析server.xml文件，创建server对象
                 load();
         } catch (Exception e) {
             e.printStackTrace(System.out);
@@ -578,6 +622,7 @@ public class Catalina extends Embedded {
      */
     public void start() {
 
+        //一般情况下server对象已经创建好了
         if (getServer() == null) {
             load();
         }
@@ -587,11 +632,13 @@ public class Catalina extends Embedded {
             return;
         }
 
+        //统计时间
         long t1 = System.nanoTime();
         
         // Start the new server
         if (getServer() instanceof Lifecycle) {
             try {
+                //启动，执行server.start()
                 ((Lifecycle) getServer()).start();
             } catch (LifecycleException e) {
                 log.error("Catalina.start: ", e);
@@ -602,12 +649,14 @@ public class Catalina extends Embedded {
         if(log.isInfoEnabled())
             log.info("Server startup in " + ((t2 - t1) / 1000000) + " ms");
 
+        //注册关闭钩子，来应对异常关闭的情况
         try {
             // Register shutdown hook
             if (useShutdownHook) {
                 if (shutdownHook == null) {
                     shutdownHook = new CatalinaShutdownHook();
                 }
+                //本质上还是调用Catalina.this.stop()
                 Runtime.getRuntime().addShutdownHook(shutdownHook);
                 
                 // If JULI is being used, disable JULI's shutdown hook since
@@ -620,12 +669,15 @@ public class Catalina extends Embedded {
                 }
             }
         } catch (Throwable t) {
+            //jdk1.2版本的兼容
             // This will fail on JDK 1.2. Ignoring, as Tomcat can run
             // fine without the shutdown hook.
         }
 
+        //阻塞在await，直到接收到"关闭"命令
         if (await) {
             await();
+            //移除钩子(钩子是用来处理异常关闭的情况)，关闭server
             stop();
         }
 
@@ -640,6 +692,9 @@ public class Catalina extends Embedded {
         try {
             // Remove the ShutdownHook first so that server.stop() 
             // doesn't get invoked twice
+            //移除关闭钩子
+            //钩子的作用就是处理异常关闭的情况
+            //此时是正常关闭的情况(调用catalina.stop()方法)，不需要钩子的后续执行
             if (useShutdownHook) {
                 Runtime.getRuntime().removeShutdownHook(shutdownHook);
 
@@ -657,6 +712,7 @@ public class Catalina extends Embedded {
         }
 
         // Shut down the server
+        //关闭server
         if (getServer() instanceof Lifecycle) {
             try {
                 ((Lifecycle) getServer()).stop();
@@ -701,6 +757,7 @@ public class Catalina extends Embedded {
     protected class CatalinaShutdownHook extends Thread {
 
         public void run() {
+            //本质还是调用Catalina.stop()
             try {
                 if (getServer() != null) {
                     Catalina.this.stop();

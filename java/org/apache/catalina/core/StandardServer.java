@@ -179,6 +179,7 @@ public final class StandardServer
      */
     protected PropertyChangeSupport support = new PropertyChangeSupport(this);
 
+    //保证线程可见性
     private volatile boolean stopAwait = false;
 
     /**
@@ -400,6 +401,7 @@ public final class StandardServer
         }
 
         // Set up a server socket to wait on
+        //创建serverSocket，监听8005端口
         try {
             awaitSocket =
                 new ServerSocket(port, 1,
@@ -427,6 +429,7 @@ public final class StandardServer
                     InputStream stream = null;
                     long acceptStartTime = System.currentTimeMillis();
                     try {
+                        //接受socket请求
                         socket = serverSocket.accept();
                         socket.setSoTimeout(10 * 1000);  // Ten seconds
                         stream = socket.getInputStream();
@@ -450,6 +453,10 @@ public final class StandardServer
                     }
 
                     // Read a set of characters from the socket
+                    //expected设置随机值
+                    //只读取每个socket请求的前expected个字符，目的如下：
+                    //1.随机值：不想让外界猜出expected的具体值
+                    //2.防止Dos：如果socket的请求很大，会造成OOM
                     int expected = 1024; // Cut off to avoid DoS attack
                     while (expected < shutdown.length()) {
                         if (random == null)
@@ -483,6 +490,7 @@ public final class StandardServer
                 }
 
                 // Match against our command string
+                //判断请求的命令字符串和"关闭"命令是否相同
                 boolean match = command.toString().equals(shutdown);
                 if (match) {
                     break;
@@ -491,6 +499,7 @@ public final class StandardServer
                                        command.toString() + "' received");
             }
         } finally {
+            //关闭serverSocket
             ServerSocket serverSocket = awaitSocket;
             awaitThread = null;
             awaitSocket = null;
